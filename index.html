@@ -75,11 +75,8 @@
  .gate .pf button{background:var(--panel2);border:1px solid var(--line2);color:var(--text);border-radius:12px;padding:13px;font-size:15px;font-weight:600;cursor:pointer}.gate .pf button:hover{border-color:var(--gold)}
  @media(prefers-reduced-motion:reduce){*{transition:none!important}}
 </style>
-<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
 </head><body>
-<div class="gate" id="gate"><div class="box">
+<div class="gate" id="gate" style="display:none"><div class="box">
   <div class="eyebrow">Swell ~ Life OS</div><h2 id="gateTitle">Welcome back</h2>
   <p class="hint" id="gateSub" style="margin-top:6px">Sign in to sync your life across every device.</p>
   <div class="pf" style="margin-top:14px">
@@ -91,17 +88,12 @@
   </div>
 </div>
 
-<div class="wrap" id="app" style="display:none">
+<div class="wrap" id="app">
   <div class="top">
     <div>
       <div class="eyebrow">Your entire life · in one place</div>
       <h1>Swell <b>~</b> Life OS</h1>
       <div class="sub" id="fulldate"></div>
-    </div>
-    <div class="prof">
-      <div class="small" id="whoami" style="text-align:right;max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"></div>
-      <div class="small" id="syncState" style="text-align:right;color:var(--aqua);margin-top:2px"></div>
-      <button onclick="signOut()">Sign out</button>
     </div>
   </div>
   <svg class="wave" viewBox="0 0 600 16" preserveAspectRatio="none"><path d="M0 10 Q 75 2 150 10 T 300 10 T 450 10 T 600 10" stroke="var(--gold)" stroke-width="1.3" fill="none" opacity=".8"/></svg>
@@ -143,15 +135,9 @@
 <div class="toast" id="toast"></div>
 
 <script>
-/* ============ FIREBASE / AUTH ============ */
-firebase.initializeApp({apiKey:"AIzaSyBB6Fp5ckABpcFXgo9eG5j-1F-X8iktt48",authDomain:"swell-os.firebaseapp.com",projectId:"swell-os",storageBucket:"swell-os.firebasestorage.app",messagingSenderId:"375253038337",appId:"1:375253038337:web:2625d455a09c100a92d700"});
-const fbAuth=firebase.auth();
-const fbDB=firebase.firestore();
-let uid=null, userEmail="", cloudReady=false, saveTimer=null, authMode="signin";
-function toggleAuth(e){if(e)e.preventDefault();authMode=authMode==="signin"?"signup":"signin";document.getElementById("gateTitle").textContent=authMode==="signin"?"Welcome back":"Create your account";document.getElementById("gateSub").textContent=authMode==="signin"?"Sign in to sync your life across every device.":"One free account — synced on every device, backed up automatically.";document.getElementById("authBtn").textContent=authMode==="signin"?"Sign in":"Create account";document.getElementById("authToggle").textContent=authMode==="signin"?"Create an account":"I already have an account";document.getElementById("authErr").textContent=""}
-function doAuth(){const email=(document.getElementById("authEmail").value||"").trim();const pass=document.getElementById("authPass").value||"";const err=document.getElementById("authErr");err.textContent="";if(!email||!pass){err.textContent="Enter your email and password.";return}const btn=document.getElementById("authBtn");btn.disabled=true;const lbl=btn.textContent;btn.textContent="…";const p=authMode==="signin"?fbAuth.signInWithEmailAndPassword(email,pass):fbAuth.createUserWithEmailAndPassword(email,pass);p.catch(function(e){err.textContent=friendlyAuthErr(e)}).then(function(){btn.disabled=false;btn.textContent=lbl})}
-function friendlyAuthErr(e){const c=(e&&e.code)||"";if(c.includes("wrong-password")||c.includes("invalid-credential"))return "Wrong email or password.";if(c.includes("user-not-found"))return "No account with that email — tap \u201cCreate an account\u201d.";if(c.includes("email-already-in-use"))return "That email already has an account — tap \u201cI already have an account\u201d.";if(c.includes("weak-password"))return "Password needs at least 6 characters.";if(c.includes("invalid-email"))return "That doesn't look like a valid email.";if(c.includes("network"))return "Network problem — check your connection.";return (e&&e.message)||"Something went wrong."}
-function signOut(){if(typeof confirm==="function"&&!confirm("Sign out of Swell on this device?"))return;fbAuth.signOut()}
+/* ============ STORAGE (solo · saved on this device) ============ */
+const SKEY="swell_solo_v1";
+function loadLocal(){try{var raw=localStorage.getItem(SKEY);if(raw)DB=Object.assign(DEF(),JSON.parse(raw))}catch(e){DB=DEF()}if(!DB.days)DB.days={};if(!DB.reviews)DB.reviews={week:{},month:{},half:{},year:{}}}
 
 /* ============ STATE ============ */
 const CATS=[{n:"Food & groceries",c:"#F2B65A",k:["food","grocer","groceries","makan","eat","restock","stock","stand","ingredient","coffee","snack"]},{n:"Bills & utilities",c:"#56C8C0",k:["bill","electric","water bill","internet","wifi","rent","listrik","pulsa","subscription"]},{n:"Transport",c:"#8F79F2",k:["fuel","petrol","bensin","gojek","grab","transport","oil","service motor","parking"]},{n:"Business",c:"#F2876A",k:["business","swell","studio","ads","marketing","supplier","material","equipment"]},{n:"Shopping",c:"#E26FB0",k:["shopping","clothes","blanket","gadget","shoes","beli"]},{n:"Health",c:"#7BD389",k:["health","medicine","doctor","gym","vitamin","obat","clinic"]},{n:"Other",c:"#9aa3bd",k:[]}];
@@ -186,10 +172,7 @@ function categorize(note){const lo=(note||"").toLowerCase();for(const c of CATS)
 function catColor(n){return (CATS.find(c=>c.n===n)||CATS[CATS.length-1]).c}
 
 /* ============ PERSIST ============ */
-function persist(){try{if(uid)localStorage.setItem("swell_cache_"+uid,JSON.stringify(DB))}catch(e){}if(!uid||!cloudReady)return;setSync("saving");clearTimeout(saveTimer);saveTimer=setTimeout(function(){fbDB.collection("users").doc(uid).set({db:DB,updatedAt:Date.now(),email:userEmail}).then(function(){setSync("saved")}).catch(function(e){setSync("offline");banner("Couldn't sync — your edits are saved on this device and will sync when you reconnect.")})},1000)}
-function setSync(s){const el=document.getElementById("syncState");if(el)el.textContent=s==="saving"?"saving…":(s==="saved"?"\u2713 synced":"\u26a0 offline")}
-function fixDB(){if(!DB.days)DB.days={};if(!DB.reviews)DB.reviews={week:{},month:{},half:{},year:{}}}
-function loadCloud(){cloudReady=false;try{var raw=localStorage.getItem("swell_cache_"+uid);DB=raw?Object.assign(DEF(),JSON.parse(raw)):DEF()}catch(_){DB=DEF()}fixDB();selWeek=weekStart(new Date());selMonth=mkMonth(new Date());selHalf=mkHalf(new Date());selYear=String(new Date().getFullYear());renderAll();setSync("saving");var settled=false;var to=setTimeout(function(){if(settled)return;settled=true;cloudReady=true;setSync("offline");banner("Couldn\u2019t reach the cloud \u2014 your edits are saving on this device. Check Brave Shields / connection, then reload to sync.")},8000);fbDB.collection("users").doc(uid).get().then(function(snap){if(settled)return;settled=true;clearTimeout(to);if(snap.exists&&snap.data()&&snap.data().db){DB=Object.assign(DEF(),snap.data().db);fixDB();renderAll()}cloudReady=true;setSync("saved");if(!snap.exists)persist()}).catch(function(e){if(settled)return;settled=true;clearTimeout(to);cloudReady=true;setSync("offline");banner("Cloud read failed: "+((e&&e.code)||(e&&e.message)||"unknown")+" \u2014 using your saved copy. Reload after checking Brave Shields.")})}
+function persist(){try{localStorage.setItem(SKEY,JSON.stringify(DB))}catch(e){toast("Couldn\u2019t save \u2014 storage may be full")}}
 
 /* ============ (auth + sync handled in FIREBASE section) ============ */
 
@@ -369,7 +352,7 @@ document.getElementById("newHabit").addEventListener("keydown",e=>{if(e.key==="E
 document.getElementById("todoTx").addEventListener("keydown",e=>{if(e.key==="Enter")addTodo()});
 document.getElementById("schLabel").addEventListener("keydown",e=>{if(e.key==="Enter")addSch()});
 setInterval(renderClock,1000);
-function exportData(){const all={app:"swell-os",exportedAt:new Date().toISOString(),email:userEmail,db:DB};const blob=new Blob([JSON.stringify(all)],{type:"application/json"});const url=URL.createObjectURL(blob);const a=document.createElement("a");a.href=url;a.download="swell-backup-"+todayStr()+".json";document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),1000);toast("Backup downloaded — keep it safe")}
+function exportData(){const all={app:"swell-os",exportedAt:new Date().toISOString(),db:DB};const blob=new Blob([JSON.stringify(all)],{type:"application/json"});const url=URL.createObjectURL(blob);const a=document.createElement("a");a.href=url;a.download="swell-backup-"+todayStr()+".json";document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),1000);toast("Backup downloaded — keep it safe")}
 function importData(file){const r=new FileReader();r.onload=function(){let o;try{o=JSON.parse(r.result)}catch(e){toast("Couldn't read that file");return}let incoming=null;if(o&&o.db)incoming=o.db;else if(o&&o.data){const first=Object.values(o.data)[0];if(first){try{incoming=JSON.parse(first)}catch(_){}}}else if(o&&o.habits)incoming=o;if(!incoming){toast("That's not a Swell backup");return}if(typeof confirm==="function"&&!confirm("Restore this backup? It replaces your current data."))return;DB=Object.assign(DEF(),incoming);if(!DB.days)DB.days={};if(!DB.reviews)DB.reviews={week:{},month:{},half:{},year:{}};persist();renderAll();toast("Restored & synced")};r.readAsText(file)}
 (function(){var _imp=document.getElementById("impFile");if(_imp)_imp.addEventListener("change",function(e){if(e.target.files&&e.target.files[0])importData(e.target.files[0])})})();
 
@@ -377,6 +360,6 @@ function importData(file){const r=new FileReader();r.onload=function(){let o;try
 function banner(msg){try{var b=document.getElementById("errbar");if(!b){b=document.createElement("div");b.id="errbar";b.style.cssText="position:fixed;left:0;right:0;top:0;max-height:60vh;overflow:auto;background:#3a1320;color:#ffd9cc;font:12px/1.5 ui-monospace,monospace;padding:12px 14px;z-index:101;white-space:pre-wrap;border-bottom:2px solid #c0506a;box-shadow:0 2px 14px rgba(0,0,0,.6)";document.body.appendChild(b)}b.textContent="\u26a0 ERROR \u2014 please screenshot this and send it to Claude:\n\n"+msg+"\n\n(tap to dismiss)";b.onclick=function(){b.remove()}}catch(_){}}
 window.addEventListener("error",function(ev){banner((ev.message||"error")+(ev.lineno?(" \u00b7 line "+ev.lineno+":"+ev.colno):"")+(ev.error&&ev.error.stack?("\n\n"+ev.error.stack):""))});
 window.addEventListener("unhandledrejection",function(ev){var r=(ev&&ev.reason)||{};banner("Unhandled promise: "+(r.message||r.code||String(r))+(r.stack?("\n\n"+r.stack):""))});
-(function(){try{var r=document.createElement("button");r.textContent="reset";r.title="Sign out & reload";r.style.cssText="position:fixed;top:6px;right:6px;z-index:102;background:#1b2238;color:#9aa3bd;border:1px solid #2c3550;border-radius:8px;font:11px sans-serif;padding:4px 9px;opacity:.7;cursor:pointer";r.onclick=function(){try{firebase.auth().signOut()}catch(_){}try{Object.keys(localStorage).forEach(function(k){if(k.indexOf("swell")===0)localStorage.removeItem(k)})}catch(_){}location.reload()};document.body.appendChild(r)}catch(_){}})();
-(function(){try{fbAuth.onAuthStateChanged(function(user){try{if(user){uid=user.uid;userEmail=user.email||"";cloudReady=false;var w=document.getElementById("whoami");if(w)w.textContent=userEmail;document.getElementById("gate").style.display="none";document.getElementById("app").style.display="block";loadCloud()}else{uid=null;cloudReady=false;document.getElementById("app").style.display="none";document.getElementById("gate").style.display="grid"}}catch(e){banner("auth: "+e.message)}})}catch(e){banner("Firebase failed to start: "+e.message+" — check your connection and reload.");document.getElementById("gate").style.display="grid"}})();
+(function(){try{var r=document.createElement("button");r.textContent="reset";r.title="Sign out & reload";r.style.cssText="position:fixed;top:6px;right:6px;z-index:102;background:#1b2238;color:#9aa3bd;border:1px solid #2c3550;border-radius:8px;font:11px sans-serif;padding:4px 9px;opacity:.7;cursor:pointer";r.onclick=function(){if(typeof confirm==="function"&&!confirm("Erase ALL data on this device and reload? Download a backup first if you want to keep it."))return;try{localStorage.removeItem(SKEY)}catch(_){}location.reload()};document.body.appendChild(r)}catch(_){}})();
+(function(){try{selWeek=weekStart(new Date());selMonth=mkMonth(new Date());selHalf=mkHalf(new Date());selYear=String(new Date().getFullYear());loadLocal();renderAll()}catch(e){banner("startup: "+e.message+(e.stack?("\n\n"+e.stack):""))}})();
 </script></body></html>
