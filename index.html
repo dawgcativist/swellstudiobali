@@ -74,12 +74,21 @@
  .gate .box{max-width:340px;width:100%;text-align:center}.gate h2{font-family:Fraunces,serif;font-weight:600;font-size:24px}.gate .pf{display:flex;flex-direction:column;gap:8px;margin-top:16px}
  .gate .pf button{background:var(--panel2);border:1px solid var(--line2);color:var(--text);border-radius:12px;padding:13px;font-size:15px;font-weight:600;cursor:pointer}.gate .pf button:hover{border-color:var(--gold)}
  @media(prefers-reduced-motion:reduce){*{transition:none!important}}
-</style></head><body>
+</style>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+</head><body>
 <div class="gate" id="gate"><div class="box">
-  <div class="eyebrow">Swell ~ Life OS</div><h2>Who's here?</h2>
-  <p class="hint" style="margin-top:6px">Pick your profile — your data stays separate and private to your device.</p>
-  <div class="pf" id="pfList"></div>
-  <div class="addrow" style="margin-top:14px"><input type="text" id="newProf" placeholder="New name…" maxlength="20"><button class="btn btn-ghost" onclick="addProfile()">Add</button></div>
+  <div class="eyebrow">Swell ~ Life OS</div><h2 id="gateTitle">Welcome back</h2>
+  <p class="hint" id="gateSub" style="margin-top:6px">Sign in to sync your life across every device.</p>
+  <div class="pf" style="margin-top:14px">
+    <input type="email" id="authEmail" placeholder="Email" autocomplete="email">
+    <input type="password" id="authPass" placeholder="Password (6+ characters)" autocomplete="current-password" style="margin-top:8px">
+    <button class="btn btn-gold" id="authBtn" onclick="doAuth()" style="margin-top:12px">Sign in</button>
+    <div id="authErr" class="hint" style="color:var(--coral);margin-top:10px"></div>
+    <div class="small" style="margin-top:12px">New here? <a href="#" id="authToggle" onclick="toggleAuth(event)" style="color:var(--gold)">Create an account</a></div>
+  </div>
 </div>
 
 <div class="wrap" id="app" style="display:none">
@@ -90,8 +99,9 @@
       <div class="sub" id="fulldate"></div>
     </div>
     <div class="prof">
-      <select id="profSel" onchange="switchProfile()"></select>
-      <button onclick="document.getElementById('gate').style.display='grid'">switch / add</button>
+      <div class="small" id="whoami" style="text-align:right;max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"></div>
+      <div class="small" id="syncState" style="text-align:right;color:var(--aqua);margin-top:2px"></div>
+      <button onclick="signOut()">Sign out</button>
     </div>
   </div>
   <svg class="wave" viewBox="0 0 600 16" preserveAspectRatio="none"><path d="M0 10 Q 75 2 150 10 T 300 10 T 450 10 T 600 10" stroke="var(--gold)" stroke-width="1.3" fill="none" opacity=".8"/></svg>
@@ -133,12 +143,15 @@
 <div class="toast" id="toast"></div>
 
 <script>
-/* ============ PROFILES ============ */
-const PKEY="swell_os_profiles";
-function profiles(){try{return JSON.parse(localStorage.getItem(PKEY))||[]}catch(e){return[]}}
-function setProfiles(a){localStorage.setItem(PKEY,JSON.stringify(a))}
-let USER=localStorage.getItem("swell_os_current")||"";
-function dataKey(u){return "swell_os_data__"+u}
+/* ============ FIREBASE / AUTH ============ */
+firebase.initializeApp({apiKey:"AIzaSyBB6Fp5ckABpcFXgo9eG5j-1F-X8iktt48",authDomain:"swell-os.firebaseapp.com",projectId:"swell-os",storageBucket:"swell-os.firebasestorage.app",messagingSenderId:"375253038337",appId:"1:375253038337:web:2625d455a09c100a92d700"});
+const fbAuth=firebase.auth();
+const fbDB=firebase.firestore();
+let uid=null, userEmail="", cloudReady=false, saveTimer=null, authMode="signin";
+function toggleAuth(e){if(e)e.preventDefault();authMode=authMode==="signin"?"signup":"signin";document.getElementById("gateTitle").textContent=authMode==="signin"?"Welcome back":"Create your account";document.getElementById("gateSub").textContent=authMode==="signin"?"Sign in to sync your life across every device.":"One free account — synced on every device, backed up automatically.";document.getElementById("authBtn").textContent=authMode==="signin"?"Sign in":"Create account";document.getElementById("authToggle").textContent=authMode==="signin"?"Create an account":"I already have an account";document.getElementById("authErr").textContent=""}
+function doAuth(){const email=(document.getElementById("authEmail").value||"").trim();const pass=document.getElementById("authPass").value||"";const err=document.getElementById("authErr");err.textContent="";if(!email||!pass){err.textContent="Enter your email and password.";return}const btn=document.getElementById("authBtn");btn.disabled=true;const lbl=btn.textContent;btn.textContent="…";const p=authMode==="signin"?fbAuth.signInWithEmailAndPassword(email,pass):fbAuth.createUserWithEmailAndPassword(email,pass);p.catch(function(e){err.textContent=friendlyAuthErr(e)}).then(function(){btn.disabled=false;btn.textContent=lbl})}
+function friendlyAuthErr(e){const c=(e&&e.code)||"";if(c.includes("wrong-password")||c.includes("invalid-credential"))return "Wrong email or password.";if(c.includes("user-not-found"))return "No account with that email — tap \u201cCreate an account\u201d.";if(c.includes("email-already-in-use"))return "That email already has an account — tap \u201cI already have an account\u201d.";if(c.includes("weak-password"))return "Password needs at least 6 characters.";if(c.includes("invalid-email"))return "That doesn't look like a valid email.";if(c.includes("network"))return "Network problem — check your connection.";return (e&&e.message)||"Something went wrong."}
+function signOut(){if(typeof confirm==="function"&&!confirm("Sign out of Swell on this device?"))return;fbAuth.signOut()}
 
 /* ============ STATE ============ */
 const CATS=[{n:"Food & groceries",c:"#F2B65A",k:["food","grocer","groceries","makan","eat","restock","stock","stand","ingredient","coffee","snack"]},{n:"Bills & utilities",c:"#56C8C0",k:["bill","electric","water bill","internet","wifi","rent","listrik","pulsa","subscription"]},{n:"Transport",c:"#8F79F2",k:["fuel","petrol","bensin","gojek","grab","transport","oil","service motor","parking"]},{n:"Business",c:"#F2876A",k:["business","swell","studio","ads","marketing","supplier","material","equipment"]},{n:"Shopping",c:"#E26FB0",k:["shopping","clothes","blanket","gadget","shoes","beli"]},{n:"Health",c:"#7BD389",k:["health","medicine","doctor","gym","vitamin","obat","clinic"]},{n:"Other",c:"#9aa3bd",k:[]}];
@@ -173,15 +186,12 @@ function categorize(note){const lo=(note||"").toLowerCase();for(const c of CATS)
 function catColor(n){return (CATS.find(c=>c.n===n)||CATS[CATS.length-1]).c}
 
 /* ============ PERSIST ============ */
-function persist(){try{localStorage.setItem(dataKey(USER),JSON.stringify(DB))}catch(e){toast("Couldn't save — storage full?")}}
-function loadUser(u){USER=u;localStorage.setItem("swell_os_current",u);try{const raw=localStorage.getItem(dataKey(u));DB=raw?Object.assign(DEF(),JSON.parse(raw)):DEF()}catch(e){DB=DEF()}if(!DB.days)DB.days={};if(!DB.reviews)DB.reviews={week:{},month:{},half:{},year:{}}}
+function persist(){try{if(uid)localStorage.setItem("swell_cache_"+uid,JSON.stringify(DB))}catch(e){}if(!uid||!cloudReady)return;setSync("saving");clearTimeout(saveTimer);saveTimer=setTimeout(function(){fbDB.collection("users").doc(uid).set({db:DB,updatedAt:Date.now(),email:userEmail}).then(function(){setSync("saved")}).catch(function(e){setSync("offline");banner("Couldn't sync — your edits are saved on this device and will sync when you reconnect.")})},1000)}
+function setSync(s){const el=document.getElementById("syncState");if(el)el.textContent=s==="saving"?"saving…":(s==="saved"?"\u2713 synced":"\u26a0 offline")}
+function loadCloud(){setSync("saving");fbDB.collection("users").doc(uid).get().then(function(snap){if(snap.exists&&snap.data()&&snap.data().db){DB=Object.assign(DEF(),snap.data().db)}else{DB=DEF()}afterLoad();setSync("saved");if(!snap.exists)persist()}).catch(function(e){try{const raw=localStorage.getItem("swell_cache_"+uid);DB=raw?Object.assign(DEF(),JSON.parse(raw)):DEF()}catch(_){DB=DEF()}afterLoad();setSync("offline");banner("Loaded your offline copy — will sync when you reconnect.")})}
+function afterLoad(){if(!DB.days)DB.days={};if(!DB.reviews)DB.reviews={week:{},month:{},half:{},year:{}};cloudReady=true;selWeek=weekStart(new Date());selMonth=mkMonth(new Date());selHalf=mkHalf(new Date());selYear=String(new Date().getFullYear());renderAll()}
 
-/* ============ PROFILE UI ============ */
-function renderGate(){const list=document.getElementById("pfList");const ps=profiles();list.innerHTML=ps.length?ps.map(p=>'<button onclick="chooseProfile(\''+esc(p)+'\')">'+esc(p)+'</button>').join(""):'<div class="hint">No profiles yet — add your name below.</div>'}
-function addProfile(){const i=document.getElementById("newProf");const v=i.value.trim();if(!v)return;const ps=profiles();if(!ps.includes(v))ps.push(v);setProfiles(ps);i.value="";renderGate();chooseProfile(v)}
-function chooseProfile(u){loadUser(u);document.getElementById("gate").style.display="none";document.getElementById("app").style.display="block";syncProfSel();renderAll()}
-function switchProfile(){chooseProfile(document.getElementById("profSel").value)}
-function syncProfSel(){const sel=document.getElementById("profSel");sel.innerHTML=profiles().map(p=>'<option'+(p===USER?" selected":"")+'>'+esc(p)+'</option>').join("")}
+/* ============ (auth + sync handled in FIREBASE section) ============ */
 
 /* ============ CLOCK / NOW-NEXT ============ */
 function renderClock(){const now=new Date();const hh=pad(now.getHours())+":"+pad(now.getMinutes());const sc=[...(DB.schedule||[])].sort((a,b)=>a.t<b.t?-1:1);let cur=null,next=null;sc.forEach(b=>{if(b.t<=hh)cur=b});next=sc.find(b=>b.t>hh)||sc[0];const el=document.getElementById("clock");if(!el)return;el.innerHTML='<div class="c"><div class="k">Clock</div><div class="big">'+hh+'<span style="font-size:14px;color:var(--muted)">:'+pad(now.getSeconds())+'</span></div><div class="v" style="color:var(--gold)">'+(cur?esc(cur.l):"Rest")+'</div></div><div class="c nx"><div class="k">Up next</div><div class="big" style="font-size:18px">'+(next?next.t:"—")+'</div><div class="v">'+(next?esc(next.l):"")+'</div></div>'}
@@ -352,16 +362,19 @@ function addG26(){const v=document.getElementById("newG26").value.trim();if(!v)r
 
 /* ============ SHARED ============ */
 function toast(m){const t=document.getElementById("toast");t.textContent=m;t.classList.add("show");setTimeout(()=>t.classList.remove("show"),2400)}
-function renderAll(){document.getElementById("fulldate").textContent=new Date().toLocaleDateString(undefined,{weekday:"long",day:"numeric",month:"long",year:"numeric"});renderClock();renderDash();renderSched();renderHabitsTab();renderReview("week");renderReview("month");renderReview("half");renderReview("year");renderFinance();renderDream()}
+function safe(fn,name){try{fn()}catch(e){console.error("[Swell] "+(name||"")+" failed:",e);banner((name||"render")+": "+e.message)}}
+function renderAll(){safe(function(){document.getElementById("fulldate").textContent=new Date().toLocaleDateString(undefined,{weekday:"long",day:"numeric",month:"long",year:"numeric"})},"date");safe(renderClock,"clock");safe(renderDash,"today");safe(renderSched,"schedule");safe(renderHabitsTab,"habits");safe(function(){renderReview("week")},"week");safe(function(){renderReview("month")},"month");safe(function(){renderReview("half")},"6-month");safe(function(){renderReview("year")},"year");safe(renderFinance,"finance");safe(renderDream,"dream")}
 document.querySelectorAll("nav button").forEach(b=>b.onclick=()=>{document.querySelectorAll("nav button").forEach(x=>x.classList.remove("on"));b.classList.add("on");document.querySelectorAll(".tab").forEach(t=>t.classList.remove("on"));const t=b.dataset.t;document.getElementById("t-"+t).classList.add("on");if(t==="week"||t==="month"||t==="half"||t==="year")renderReview(t);if(t==="finance")renderFinance();if(t==="sched")renderSched();if(t==="dream")renderDream();if(t==="habits")renderHabitsTab();window.scrollTo({top:0,behavior:"smooth"})});
 document.getElementById("newHabit").addEventListener("keydown",e=>{if(e.key==="Enter")addHabit()});
 document.getElementById("todoTx").addEventListener("keydown",e=>{if(e.key==="Enter")addTodo()});
 document.getElementById("schLabel").addEventListener("keydown",e=>{if(e.key==="Enter")addSch()});
 setInterval(renderClock,1000);
-function exportData(){const all={app:"swell-os",exportedAt:new Date().toISOString(),profiles:profiles(),data:{}};profiles().forEach(p=>{const raw=localStorage.getItem(dataKey(p));if(raw)all.data[p]=raw});const blob=new Blob([JSON.stringify(all)],{type:"application/json"});const url=URL.createObjectURL(blob);const a=document.createElement("a");a.href=url;a.download="swell-backup-"+todayStr()+".json";document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),1000);toast("Backup downloaded — keep it safe")}
-function importData(file){const r=new FileReader();r.onload=()=>{let o;try{o=JSON.parse(r.result)}catch(e){toast("Couldn't read that file");return}if(!o||!o.data){toast("That's not a Swell backup");return}if(typeof confirm==="function"&&!confirm("Restore this backup? It replaces current data for all profiles."))return;if(o.profiles)setProfiles(o.profiles);Object.entries(o.data).forEach(([p,raw])=>localStorage.setItem(dataKey(p),raw));toast("Restored — reloading…");setTimeout(()=>location.reload(),800)};r.readAsText(file)}
+function exportData(){const all={app:"swell-os",exportedAt:new Date().toISOString(),email:userEmail,db:DB};const blob=new Blob([JSON.stringify(all)],{type:"application/json"});const url=URL.createObjectURL(blob);const a=document.createElement("a");a.href=url;a.download="swell-backup-"+todayStr()+".json";document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),1000);toast("Backup downloaded — keep it safe")}
+function importData(file){const r=new FileReader();r.onload=function(){let o;try{o=JSON.parse(r.result)}catch(e){toast("Couldn't read that file");return}let incoming=null;if(o&&o.db)incoming=o.db;else if(o&&o.data){const first=Object.values(o.data)[0];if(first){try{incoming=JSON.parse(first)}catch(_){}}}else if(o&&o.habits)incoming=o;if(!incoming){toast("That's not a Swell backup");return}if(typeof confirm==="function"&&!confirm("Restore this backup? It replaces your current data."))return;DB=Object.assign(DEF(),incoming);if(!DB.days)DB.days={};if(!DB.reviews)DB.reviews={week:{},month:{},half:{},year:{}};persist();renderAll();toast("Restored & synced")};r.readAsText(file)}
 (function(){var _imp=document.getElementById("impFile");if(_imp)_imp.addEventListener("change",function(e){if(e.target.files&&e.target.files[0])importData(e.target.files[0])})})();
 
 /* boot */
-(function(){selWeek=weekStart(new Date());selMonth=mkMonth(new Date());selHalf=mkHalf(new Date());selYear=String(new Date().getFullYear());renderGate();if(USER&&profiles().includes(USER)){chooseProfile(USER)}else{document.getElementById("gate").style.display="grid"}})();
+function banner(msg){try{var b=document.getElementById("errbar");if(!b){b=document.createElement("div");b.id="errbar";b.style.cssText="position:fixed;left:0;right:0;bottom:0;background:#3a1320;color:#ffd0c0;font:12px ui-monospace,monospace;padding:9px 12px;z-index:99;white-space:pre-wrap;border-top:1px solid #7a2a3a";document.body.appendChild(b)}b.textContent="⚠ "+msg+"   (tap to dismiss)";b.onclick=function(){b.remove()}}catch(_){}}
+window.addEventListener("error",function(ev){banner((ev.message||"error")+(ev.lineno?(" · L"+ev.lineno):""))});
+(function(){try{fbAuth.onAuthStateChanged(function(user){try{if(user){uid=user.uid;userEmail=user.email||"";cloudReady=false;var w=document.getElementById("whoami");if(w)w.textContent=userEmail;document.getElementById("gate").style.display="none";document.getElementById("app").style.display="block";loadCloud()}else{uid=null;cloudReady=false;document.getElementById("app").style.display="none";document.getElementById("gate").style.display="grid"}}catch(e){banner("auth: "+e.message)}})}catch(e){banner("Firebase failed to start: "+e.message+" — check your connection and reload.");document.getElementById("gate").style.display="grid"}})();
 </script></body></html>
